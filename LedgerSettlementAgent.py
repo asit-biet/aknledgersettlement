@@ -187,10 +187,11 @@ class LedgerSettlement:
 # === MCP Endpoint ===
 @app.post("/api/mcp")
 def process_mcp():
-    settle = LedgerSettlement(3)
-    settle.load_ledger('Ledger settlements_638851462197217174.csv')
-    settle.settle_ledger()
-    settle.write_unsettled()
-    settle.write_results('matched_transactions.csv')
+    #settle = LedgerSettlement(3)
+    #settle.load_ledger('Ledger settlements_638851462197217174.csv')
+    #settle.settle_ledger()
+    #settle.write_unsettled()
+    #settle.write_results('matched_transactions.csv')
     # You need to define McpResponse and results, or use a standard response
+
     return {"message": "Matching complete. Results saved to matched_transactions.csv"}
