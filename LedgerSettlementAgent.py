@@ -1,4 +1,8 @@
 from fastapi import FastAPI, HTTPException
+from azure.storage.blob import BlobServiceClient
+from datetime import datetime
+from dotenv import load_dotenv
+
 import pandas as pd
 import numpy as np
 import re # To extract numbers from descriptions
@@ -6,9 +10,15 @@ import uuid
 from pydantic import BaseModel
 import requests
 import os
+import io
 
 # === FastAPI Setup ===
 app = FastAPI()
+load_dotenv()
+
+CONNSTRING = os.getenv('CONNSTRING')
+OUTPUTCON = os.getenv('OUTPUTCON')
+INPUTCON = os.getenv('INPUTCON')
 
 class LedgerSettlement:
     def __init__(self, days): 
@@ -28,6 +38,9 @@ class LedgerSettlement:
         - Extracts numbers from the Description field.
         - Adds a 'Matched' column to track matched transactions.
         """
+
+        
+
         ledger = pd.read_csv(file) 
 
         # Clean and prepare data
@@ -182,11 +195,75 @@ class LedgerSettlement:
         """
         matched_df = pd.DataFrame(self.results)
         matched_df.to_csv(file, index=False)
+        output = io.StringIO()
+        output = matched_df.to_csv (index_label="idx", encoding = "utf-8")
         print('Matching complete. Results saved to matched_transactions.csv')
 
-# === MCP Endpoint ===
+       
+
+        blob_service = BlobServiceClient.from_connection_string(CONNSTRING)
+
+        container_client = blob_service.get_container_client(OUTPUTCON)
+
+        my_string = "matched_transactions.csv"
+
+        # Format the datetime object into a string
+        # Example format: "YYYY-MM-DD HH:MM:SS"
+        current_datetime = datetime.now()
+        formatted_datetime_string = current_datetime.strftime("%Y-%m-%d %H:%M:%S")
+
+        # Combine the string and the formatted datetime string
+        combined_string = f"{formatted_datetime_string} {my_string}"
+
+        blob_client = blob_service.get_blob_client(container=OUTPUTCON, 
+        blob=combined_string)
+
+
+        blob_client.upload_blob(output,overwrite=True)
+
+        #blobService = BlockBlobService(account_name=accountName, account_key=accountKey)
+
+        #blobService.create_blob_from_text('output', 'matched_transactions.csv', output)
+
+
+    def executeFromBlob(self):
+        CONNECTION_STRING = CONNSTRING
+        CONTAINER_NAME = INPUTCON
+        FOLDER_PREFIX = "data/" # e.g., "data/csv_files/"
+
+        blob_service_client = BlobServiceClient.from_connection_string(CONNECTION_STRING)
+        container_client = blob_service_client.get_container_client(CONTAINER_NAME)
+
+        dataframes = {} # Dictionary to store DataFrames, keyed by blob name
+
+        # List blobs within the specified folder prefix
+        for blob in container_client.list_blobs(name_starts_with=FOLDER_PREFIX):
+            if blob.name.endswith(".csv"):
+                print(f"Processing: {blob.name}")
+
+                # Download blob content to a stream
+                download_stream = container_client.get_blob_client(blob.name).download_blob()
+                
+                # Read content into a BytesIO object
+                csv_data = io.BytesIO()
+                download_stream.readinto(csv_data)
+                csv_data.seek(0) # Reset stream position to the beginning
+
+                settle = LedgerSettlement(3)
+                settle.load_ledger(csv_data)
+                settle.settle_ledger()
+                settle.write_unsettled()
+                settle.write_results('matched_transactions.csv')
+
+                container_client.delete_blob(blob.name);
+
+
+#def main() :
+ #=== MCP Endpoint ===
 @app.post("/api/mcp")
 def process_mcp():
+    settle = LedgerSettlement(3)
+    settle.executeFromBlob()
     #settle = LedgerSettlement(3)
     #settle.load_ledger('Ledger settlements_638851462197217174.csv')
     #settle.settle_ledger()
@@ -194,4 +271,4 @@ def process_mcp():
     #settle.write_results('matched_transactions.csv')
     # You need to define McpResponse and results, or use a standard response
 
-    return {"message": "Matching complete. Results saved to matched_transactions.csv"}
+    #return {"message": "Matching3 complete. Results saved to matched_transactions.csv"}
