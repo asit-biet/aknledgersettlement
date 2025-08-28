@@ -1,3 +1,4 @@
+azure-storage-blob==12.14.1
 fastapi==0.116.1
 numpy==2.3.2
 pandas==2.3.2
